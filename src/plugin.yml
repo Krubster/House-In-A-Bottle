@@ -2,7 +2,7 @@ name: HouseInaBottle
 main: ru.alastar.Main
 author: Alastar
 description: Virtual housing
-version: 2.0
+version: 1.0
 depend: [WorldEdit]
 softdepend: [WorldGuard, Vault, SQLLibrary]
 load: POSTWORLD
@@ -31,3 +31,11 @@ commands:
        description: Exporting housings database to selected
        permission: HAB.export
        usage: /hexport <db>
+     htele:
+       description: Teleports to the specified house
+       permission: HAB.tele
+       usage: /htele <housename>
+     hsetspawn:
+       description: Sets house spawn point
+       permission: HAB.setspawn
+       usage: /setspawn <housename>
