@@ -19,3 +19,7 @@ platform_width: 5
 flags_allow: []
 flags_deny: [ pvp ]
 restrict_invite:  [ enderdragon, witherskull, witherboss, ghast ]
+passByKey: false
+keyId: 373
+alllow_stealing: false
+passOnlyByKey: false

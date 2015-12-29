@@ -2,13 +2,13 @@ name: HouseInaBottle
 main: ru.alastar.Main
 author: Alastar
 description: Virtual housing
-version: 1.0
+version: 3.0
 depend: [WorldEdit]
 softdepend: [WorldGuard, Vault, SQLLibrary]
 load: POSTWORLD
 commands:
      hcreate:
-       description: Create housing
+       description: Creates housing
        permission: HAB.create
        usage: /hcreate <housename>
      hlist:

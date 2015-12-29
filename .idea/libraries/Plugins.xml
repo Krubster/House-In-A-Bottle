@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="Plugins">
+    <CLASSES>
+      <root url="jar://C:/mcplugins/plugins/SQLibrary-7.1.jar!/" />
+      <root url="jar://C:/mcplugins/plugins/Vault.jar!/" />
+      <root url="jar://C:/mcplugins/plugins/worldedit-bukkit-6.1.jar!/" />
+      <root url="jar://C:/mcplugins/plugins/worldguard-6.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

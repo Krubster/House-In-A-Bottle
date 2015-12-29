@@ -18,6 +18,7 @@ import net.milkbowl.vault.chat.Chat;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.permission.Permission;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -26,10 +27,15 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.material.MaterialData;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -40,7 +46,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.logging.Level;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 import static com.sk89q.worldguard.protection.flags.StateFlag.State.ALLOW;
@@ -63,6 +69,9 @@ public class Main extends JavaPlugin implements Listener {
 
     protected BinaryManager binManager = null;
 
+
+    public boolean useKey = false;
+    public int keyId = 373;
     protected boolean useEconomy = false;
     protected Permission permission = null;
     protected Economy economy = null;
@@ -91,6 +100,42 @@ public class Main extends JavaPlugin implements Listener {
     private List<String> flags_deny;
     private List<String> restrict_invite;
     private String cant_invite;
+    private String htele_alias = "htele";
+    private String haccept_alias = "haccept";
+    private String hdecline_alias = "hdecline";
+    private String hcreate_alias = "hcreate";
+    private String hlist_alias = "hlist";
+    private String hsetspawn_alias = "hsetspawn";
+    private String hexport_alias = "hexport";
+    private String hinvite_alias = "hinvite";
+    private String cant_or_no_perm = "You can't do this, or just have no permissions!";
+    private String htele_perm = "HAB.tele";
+    private String hcreate_perm = "HAB.create";
+    private String hinvite_perm = "HAB.invite";
+    private String haccept_perm = "HAB.accept";
+    private String hdecline_perm = "HAB.decline";
+    private String hlist_perm = "HAB.list";
+    private String hexport_perm = "HAB.export";
+    private String cmd_list = "List of commands:";
+    private String hsetspawn_perm = "HAB.setspawn";
+    private String usage;
+    private String htele_desc;
+    private String htele_args;
+    private String haccept_desc;
+    private String hdecline_desc;
+    private String hcreate_args;
+    private String hcreate_desc;
+    private String hlist_desc;
+    private String hsetspawn_desc;
+    private String hexport_desc;
+    private String hexport_args;
+    private String hinvite_desc;
+    private String desc;
+    private String hsetspawn_args;
+    private static String key_give;
+    private String key_info;
+    private boolean allow_stealing = false;
+    private boolean passOnlyByKey = false;
 
     public void onEnable() {
         log = getLogger();
@@ -105,27 +150,29 @@ public class Main extends JavaPlugin implements Listener {
         platformY = config.getInt("platform_y");
         platformWidth = config.getInt("platform_width");
         String lang_file = config.getString("lang");
+        allow_stealing = config.getBoolean("allow_stealing");
+        passOnlyByKey = config.getBoolean("passOnlyByKey");
 
+        useKey = config.getBoolean("passByKey");
+        keyId = config.getInt("keyId");
         flags_allow = config.getStringList("flags_allow");
         flags_deny = config.getStringList("flags_deny");
         restrict_invite = config.getStringList("restrict_invite");
+
         log.info("Custom flags loaded:");
         log.info("ALLOW:");
 
-        for(final String allow: flags_allow)
-        {
+        for (final String allow : flags_allow) {
             log.info(allow);
         }
         log.info("DENY:");
-        for(final String deny: flags_deny)
-        {
+        for (final String deny : flags_deny) {
             log.info(deny);
         }
 
         log.info("Entities restricted:");
 
-        for(final String restricted: restrict_invite)
-        {
+        for (final String restricted : restrict_invite) {
             log.info(restricted);
         }
 
@@ -135,8 +182,9 @@ public class Main extends JavaPlugin implements Listener {
 
         lang = new YamlConfiguration();
         try {
-            lang.load(System.getProperty("user.dir")+ "/plugins/HouseInaBottle/" + lang_file + ".yml");
+            lang.load(System.getProperty("user.dir") + "/plugins/HouseInaBottle/" + lang_file + ".yml");
             loadLanguage();
+
         } catch (IOException | InvalidConfigurationException e) {
             e.printStackTrace();
             this.setEnabled(false);
@@ -180,12 +228,19 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
 
+        if (getPlugin(net.milkbowl.vault.Vault.class) != null) {
+            setupPermissions();
+            setupChat();
+        } else {
+            log.info("Vault plugin not found! Aborting!");
+            this.setEnabled(false);
+            return;
+        }
+
         if (useEconomy) {
             cost = config.getInt("housing_cost");
             if (getPlugin(net.milkbowl.vault.Vault.class) != null) {
                 setupEconomy();
-                setupPermissions();
-                setupChat();
             } else {
                 log.info("Vault plugin not found! Aborting!");
                 this.setEnabled(false);
@@ -199,7 +254,7 @@ public class Main extends JavaPlugin implements Listener {
     private void loadLanguage() {
         not_owned = lang.getString("not_owned");
         welcome = lang.getString("welcome");
-        specify_house_name  =  lang.getString("specify_house_name");
+        specify_house_name = lang.getString("specify_house_name");
         right_click = lang.getString("right_click");
         cant_invite_to_others = lang.getString("cant_invite_to_others");
         accepted_invite = lang.getString("accepted_invite");
@@ -217,6 +272,48 @@ public class Main extends JavaPlugin implements Listener {
         house_exists = lang.getString("house_exists");
         new_house = lang.getString("new_house");
         cant_invite = lang.getString("cant_invite");
+
+        htele_alias = lang.getString("htele");
+        htele_perm = lang.getString("htele_perm");
+        htele_desc = lang.getString("htele_desc");
+        htele_args = lang.getString("htele_args");
+
+        haccept_alias = lang.getString("haccept");
+        haccept_perm = lang.getString("haccept_perm");
+        haccept_desc = lang.getString("haccept_desc");
+
+        hdecline_alias = lang.getString("hdecline");
+        hdecline_perm = lang.getString("hdecline_perm");
+        hdecline_desc = lang.getString("hdecline_desc");
+
+        hcreate_alias = lang.getString("hcreate");
+        hcreate_perm = lang.getString("hcreate_perm");
+        hcreate_desc = lang.getString("hcreate_desc");
+        hcreate_args = lang.getString("hcreate_args");
+
+        hlist_alias = lang.getString("hlist");
+        hlist_perm = lang.getString("hlist_perm");
+        hlist_desc = lang.getString("hlist_desc");
+
+        hsetspawn_alias = lang.getString("hsetspawn");
+        hsetspawn_perm = lang.getString("hsetspawn_perm");
+        hsetspawn_desc = lang.getString("hsetspawn_desc");
+        hsetspawn_args = lang.getString("hsetspawn_args");
+
+        hexport_alias = lang.getString("hexport");
+        hexport_perm = lang.getString("hexport_perm");
+        hexport_desc = lang.getString("hexport_desc");
+        hexport_args = lang.getString("hexport_args");
+
+        hinvite_alias = lang.getString("hinvite");
+        hinvite_perm = lang.getString("hinvite_perm");
+        hinvite_desc = lang.getString("hinvite_desc");
+
+        cmd_list = lang.getString("cmd_list");
+        usage = lang.getString("usage");
+        desc = lang.getString("desc");
+        key_give = lang.getString("key_give");
+        key_info = lang.getString("key_info");
     }
 
     private void loadHousings() {
@@ -265,6 +362,10 @@ public class Main extends JavaPlugin implements Listener {
         _housing_world = getServer().getWorld("housing");
         if (_housing_world == null) {
             _housing_world = getServer().createWorld(new HousingWorldCreator("housing"));
+            _housing_world.setAmbientSpawnLimit(0);
+            _housing_world.setAnimalSpawnLimit(0);
+            _housing_world.setMonsterSpawnLimit(0);
+            _housing_world.setKeepSpawnInMemory(false);
         }
     }
 
@@ -283,7 +384,7 @@ public class Main extends JavaPlugin implements Listener {
             binManager.saveDB(housings);
         } else {
             try {
-                if (saveSQL(housings)){
+                if (saveSQL(housings)) {
                     log.info("Data saved successfully!");
                 } else {
                     log.info("SQLDatabase is unreachable, dumping saves...");
@@ -317,7 +418,12 @@ public class Main extends JavaPlugin implements Listener {
 
 
     public boolean onCommand(CommandSender sender, Command cmd, String commandLabel, String[] args) {
-                if (cmd.getName().equalsIgnoreCase("htele")) {
+        if (cmd.getName().equalsIgnoreCase("habhelp")) {
+            buildHelpMsg(sender);
+        }
+        if (cmd.getName().equalsIgnoreCase(htele_alias.toLowerCase())) {
+            if (permission.has(sender, htele_perm)) {
+                if (!passOnlyByKey || (passOnlyByKey && !useKey)) {
                     if (args.length != 1) {
                         return false;
                     } else {
@@ -336,94 +442,230 @@ public class Main extends JavaPlugin implements Listener {
                         }
                     }
                     return true;
-                } else if (cmd.getName().equalsIgnoreCase("hcreate") && sender != null) {
-                    if (sender instanceof Player && args.length == 1) {
-                        tryCreateFor((Player) sender, args[0]);
-                        return true;
-                    }
-                } else if (cmd.getName().equalsIgnoreCase("hsetspawn")) {
-                    if (args.length == 1 && sender instanceof Player) {
-                        String hName = args[0];
-                        tryRelocateSpawn(hName, (Player) sender);
-                    } else {
-                        assert sender != null;
-                        sender.sendMessage(specify_house_name);
-                    }
-                    return true;
-                } else if (cmd.getName().equalsIgnoreCase("hinvite")) {
-                    if (args.length == 1 && sender != null) {
-                        if (sender instanceof Player) {
-                            if (getHousing(args[0]) != null) {
-                                if (getHousing(args[0]).checkOwner((Player) sender)) {
-                                    inviters.add(new InviteClick((Player) sender, args[0]));
-                                    sender.sendMessage(right_click);
-                                } else {
-                                    sender.sendMessage(cant_invite_to_others);
-                                }
-                            } else {
-                                sender.sendMessage(wrong_housing);
-                            }
-                        }
-                    } else {
-                        assert sender != null;
-                        sender.sendMessage(specify_house_name);
-                    }
-                    return true;
-                } else if (cmd.getName().equalsIgnoreCase("haccept")) {
-                    if (sender != null) {
-                        if (sender instanceof Player) {
-                            Invite invite = getInvite((Player) sender);
-                            if (invite != null) {
-                                invite.inviter.sendMessage("" + accepted_invite.replace("<player>", invite.invited.getName()));
-
-                                teleportToHouse(invite.invited, invite.to);
-                                pendings.remove(invite);
-                            }
-                        }
-                    }
-                    return true;
-                } else if (cmd.getName().equalsIgnoreCase("hdecline")) {
-                    if (sender != null) {
-                        if (sender instanceof Player) {
-                            Invite invite = getInvite((Player) sender);
-                            if (invite != null) {
-                                invite.inviter.sendMessage("" + refused_invite.replace("<player>", invite.invited.getName()));
-                                pendings.remove(invite);
-                            }
-                        }
-                    }
-                    return true;
-                } else if (cmd.getName().equalsIgnoreCase("hlist")) {
-                    if (sender != null) {
-                        if (sender instanceof Player) {
-                            listHousings(sender);
-                        }
-                    }
-                    return true;
-                } else if (cmd.getName().equalsIgnoreCase("hexport")) {
-                    if (args.length == 1) {
-                        String to = args[0];
-                        tryExport(to, sender);
-
-                    } else if (sender != null) {
-                        sender.sendMessage(specify_target);
-                    }
-                    return true;
                 }
+                else {
+                    sender.sendMessage("...");
+                }
+            } else {
+                sender.sendMessage(cant_or_no_perm);
+            }
+        }
+
+        if (cmd.getName().equalsIgnoreCase(hcreate_alias)) {
+            if (permission.has(sender, hcreate_perm)) {
+                if (args.length == 1 && sender instanceof Player) {
+                    tryCreateFor((Player) sender, args[0]);
+                } else {
+                    assert sender != null;
+                    sender.sendMessage(specify_house_name);
+                }
+                return true;
+            } else {
+                sender.sendMessage(cant_or_no_perm);
+            }
+        } else if (cmd.getName().equalsIgnoreCase(hsetspawn_alias)) {
+            if (permission.has(sender, hsetspawn_perm)) {
+                if (args.length == 1 && sender instanceof Player) {
+                    String hName = args[0];
+                    tryRelocateSpawn(hName, (Player) sender);
+                } else {
+                    assert sender != null;
+                    sender.sendMessage(specify_house_name);
+                }
+                return true;
+            } else {
+                sender.sendMessage(cant_or_no_perm);
+            }
+        } else if (cmd.getName().equalsIgnoreCase(hinvite_alias.toLowerCase())) {
+            if (args.length == 1 && sender != null) {
+                if (permission.has(sender, hinvite_perm)) {
+                    if (sender instanceof Player) {
+                        if (getHousing(args[0]) != null) {
+                            if (getHousing(args[0]).checkOwner((Player) sender) || (allow_stealing && isInHouse((Player) sender, args[0]))) {
+                                inviters.add(new InviteClick((Player) sender, args[0]));
+                                sender.sendMessage(right_click);
+                            } else {
+                                sender.sendMessage(cant_invite_to_others);
+                            }
+                        } else {
+                            sender.sendMessage(wrong_housing);
+                        }
+                    }
+                } else {
+                    sender.sendMessage(cant_or_no_perm);
+                }
+            } else {
+                assert sender != null;
+                sender.sendMessage(specify_house_name);
+            }
+            return true;
+        } else if (cmd.getName().
+
+                equalsIgnoreCase(haccept_alias.toLowerCase()
+
+                ))
+
+        {
+            if (sender != null) {
+                if (permission.has(sender, haccept_perm)) {
+
+                    if (sender instanceof Player) {
+                        Invite invite = getInvite((Player) sender);
+                        if (invite != null) {
+                            invite.inviter.sendMessage("" + accepted_invite.replace("<player>", invite.invited.getName()));
+
+                            teleportToHouse(invite.invited, invite.to);
+                            pendings.remove(invite);
+                        }
+                    }
+                } else {
+                    sender.sendMessage(cant_or_no_perm);
+                }
+            }
+            return true;
+        } else if (cmd.getName().
+
+                equalsIgnoreCase(hdecline_alias.toLowerCase()
+
+                ))
+
+        {
+            if (sender != null) {
+                if (permission.has(sender, hdecline_perm)) {
+
+                    if (sender instanceof Player) {
+                        Invite invite = getInvite((Player) sender);
+                        if (invite != null) {
+                            invite.inviter.sendMessage("" + refused_invite.replace("<player>", invite.invited.getName()));
+                            pendings.remove(invite);
+                        }
+                    }
+                } else {
+                    sender.sendMessage(cant_or_no_perm);
+                }
+            }
+            return true;
+        } else if (cmd.getName().equalsIgnoreCase(hlist_alias.toLowerCase())) {
+            if (sender != null) {
+                if (permission.has(sender, hlist_perm)) {
+                    if (sender instanceof Player) {
+                        if (useKey && allow_stealing) {
+                            sender.sendMessage("...");
+                        } else
+                            listHousings(sender);
+                    }
+
+                } else {
+                    sender.sendMessage(cant_or_no_perm);
+                }
+            }
+            return true;
+        } else if (cmd.getName().
+
+                equalsIgnoreCase(hexport_alias.toLowerCase()
+
+                ))
+
+        {
+            if (permission.has(sender, hexport_perm)) {
+                if (args.length == 1) {
+                    String to = args[0];
+                    tryExport(to, sender);
+
+                } else if (sender != null) {
+                    sender.sendMessage(specify_target);
+                }
+                return true;
+            } else {
+                sender.sendMessage(cant_or_no_perm);
+            }
+        }
+
         return false;
+    }
+
+    private void buildHelpMsg(CommandSender sender) {
+        sender.sendMessage(cmd_list);
+
+        //htele
+        sender.sendMessage(htele_alias);
+        sender.sendMessage(desc + htele_desc);
+        sender.sendMessage("Permission: " + htele_perm);
+        sender.sendMessage(usage + "/" + htele_alias + htele_args);
+
+        //hsetspawn
+        sender.sendMessage(hsetspawn_alias);
+        sender.sendMessage(desc + hsetspawn_desc);
+        sender.sendMessage("Permission: " + hsetspawn_perm);
+        sender.sendMessage(usage + "/" + hsetspawn_alias + hsetspawn_args);
+
+        //hcreate
+        sender.sendMessage(hcreate_alias);
+
+        sender.sendMessage(desc + hcreate_desc);
+
+        sender.sendMessage("Permission: " + hcreate_perm);
+        sender.sendMessage(usage + "/" + hcreate_alias + hcreate_args);
+
+
+        //hexport
+        sender.sendMessage(hexport_alias);
+
+        sender.sendMessage(desc + hexport_desc);
+
+        sender.sendMessage("Permission: " + hexport_perm);
+        sender.sendMessage(usage + "/" + hexport_alias + hexport_args);
+
+
+        //hlist
+        sender.sendMessage(hlist_alias);
+
+        sender.sendMessage(desc + hlist_desc);
+
+        sender.sendMessage("Permission: " + hlist_perm);
+        sender.sendMessage(usage + "/" + hlist_alias);
+
+
+        //hinvite
+        sender.sendMessage(hinvite_alias);
+
+        sender.sendMessage(desc + hinvite_desc);
+
+        sender.sendMessage("Permission: " + hinvite_perm);
+        sender.sendMessage(usage + "/" + hinvite_alias);
+
+
+        //haccept
+        sender.sendMessage(haccept_alias);
+
+        sender.sendMessage(desc + haccept_desc);
+
+        sender.sendMessage("Permission: " + haccept_perm);
+        sender.sendMessage(usage + "/" + haccept_alias);
+
+
+        //hdecline
+        sender.sendMessage(hdecline_alias);
+
+        sender.sendMessage(desc + hdecline_desc);
+
+        sender.sendMessage("Permission: " + hdecline_perm);
+        sender.sendMessage(usage + "/" + hdecline_alias);
+
+
     }
 
     private void tryExport(String to, CommandSender sender) {
         if (to.equalsIgnoreCase("sql")) {
             HashMap<String, Housing> dump;
             dump = new BinaryManager().loadDB();
-            if(dump != null) {
+            if (dump != null) {
                 try {
                     saveSQL(dump);
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
-                final  String msg = dump.size() + " housings was exported to MySQL database!";
+                final String msg = dump.size() + " housings was exported to MySQL database!";
                 log.info(msg);
                 assert sender != null;
                 sender.sendMessage(msg);
@@ -433,16 +675,14 @@ public class Main extends JavaPlugin implements Listener {
             HashMap<String, Housing> dump = new HashMap<>();
 
             try {
-                if(mysql.open()) {
+                if (mysql.open()) {
                     ps = mysql.prepare("SELECT * FROM " + config.getString("db_table") + ";");
                     ResultSet set = mysql.query(ps);
                     while (set.next()) {
                         dump.put(set.getString("name"), new Housing(set.getDouble("x_tele"), set.getDouble("y_tele"), set.getDouble("z_tele"), set.getInt("x_grid"), set.getInt("y_grid"), set.getString("player_name")));
                     }
                     mysql.close();
-                }
-                else
-                {
+                } else {
                     log.info("MySQL connection failed!");
 
                     assert sender != null;
@@ -451,9 +691,9 @@ public class Main extends JavaPlugin implements Listener {
             } catch (SQLException e) {
                 e.printStackTrace();
             }
-             new BinaryManager().saveDB(dump);
-             final String msg = dump.size() + " housings was exported to binary database!";
-             log.info(msg);
+            new BinaryManager().saveDB(dump);
+            final String msg = dump.size() + " housings was exported to binary database!";
+            log.info(msg);
 
             assert sender != null;
             sender.sendMessage(msg);
@@ -504,11 +744,39 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     @EventHandler
+    public void onItemClick(PlayerInteractEvent event)
+    {
+        Player player = event.getPlayer();
+       // log.info("Interact!");
+        if (player.getItemInHand() != null) {
+        //    log.info("Has an item in hand!");
+            if (player.getItemInHand().getItemMeta().getLore() != null) {
+                if (player.getItemInHand().getItemMeta().getLore().size() > 0 && player.getItemInHand().getItemMeta().getLore().get(0).equals("House In A Bottle")) {
+         //           log.info("Tis is a key!!");
+                    String house_name = player.getItemInHand().getItemMeta().getLore().get(1);
+                    Housing house = housings.get(house_name);
+                    if (house != null) {
+                        if (house.checkOwner((Player) player) || allow_stealing) {
+                            Location loc = new Location(_housing_world, house._x_tel, house._y_tel, house._z_tel);
+                            ((Player) player).teleport(loc);
+                            player.sendMessage(welcome);
+                        } else {
+                            player.sendMessage(not_owned);
+                        }
+                    } else {
+                        player.sendMessage(wrong_housing);
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler
     public void onPlayerInteract(PlayerInteractEntityEvent event) {
         if (inviting(event.getPlayer())) {
             //log.info( "interactPlayer");
             Entity en = event.getRightClicked();
-            if(!restrict_invite.contains(en.getName().toLowerCase())) {
+            if (!restrict_invite.contains(en.getName().toLowerCase())) {
                 if (en instanceof Player) {
                     InviteClick click = getClick(event.getPlayer());
                     if (click != null) {
@@ -525,8 +793,7 @@ public class Main extends JavaPlugin implements Listener {
                         inviters.remove(getClick(event.getPlayer()));
                     }
                 }
-            }
-            else
+            } else
                 event.getPlayer().sendMessage(cant_invite);
         }
     }
@@ -556,7 +823,7 @@ public class Main extends JavaPlugin implements Listener {
     private void tryRelocateSpawn(String hName, Player sender) {
         Housing house = getHousing(hName);
         if (house != null) {
-            if (house.checkOwner(sender)) {
+            if (house.checkOwner(sender) || allow_stealing) {
                 if (sender.getWorld().equals(_housing_world)) {
                     if (isInHouse(sender, hName)) {
                         house._x_tel = sender.getLocation().getBlockX();
@@ -669,7 +936,7 @@ public class Main extends JavaPlugin implements Listener {
             region.setOwners(owners);
             Flag[] var1 = DefaultFlag.getFlags();
             int var2 = var1.length;
-            for(final String allow: flags_allow) {
+            for (final String allow : flags_allow) {
                 for (int var3 = 0; var3 < var2; ++var3) {
                     Flag flag = var1[var3];
                     if (flag.getName().replace("-", "").equalsIgnoreCase(allow.replace("-", ""))) {
@@ -677,8 +944,7 @@ public class Main extends JavaPlugin implements Listener {
                     }
                 }
             }
-            for(final String deny: flags_deny)
-            {
+            for (final String deny : flags_deny) {
                 for (int var3 = 0; var3 < var2; ++var3) {
                     Flag flag = var1[var3];
                     if (flag.getName().replace("-", "").equalsIgnoreCase(deny.replace("-", ""))) {
@@ -689,5 +955,22 @@ public class Main extends JavaPlugin implements Listener {
 
         }
         sender.sendMessage(Main.new_house.replace("<name>", houseName));
+        if (useKey) {
+            giveKey(sender, houseName);
+        }
+    }
+
+    private void giveKey(Player to, String house) {
+        ItemStack keyItem = new ItemStack(Material.getMaterial(keyId));
+        ItemMeta meta = keyItem.getItemMeta();
+
+        meta.setDisplayName(key_info.replace("<name>", house));
+        List<String> lore = new ArrayList<String>();
+        lore.add("House In A Bottle");
+        lore.add(house);
+        meta.setLore(lore);
+        keyItem.setItemMeta(meta);
+        to.getLocation().getWorld().dropItem(to.getLocation(), keyItem);
+        to.sendMessage(Main.key_give.replace("<name>", house));
     }
 }
