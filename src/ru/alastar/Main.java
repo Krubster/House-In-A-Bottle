@@ -27,15 +27,15 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Item;
+
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.material.MaterialData;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -442,8 +442,7 @@ public class Main extends JavaPlugin implements Listener {
                         }
                     }
                     return true;
-                }
-                else {
+                } else {
                     sender.sendMessage("...");
                 }
             } else {
@@ -481,7 +480,7 @@ public class Main extends JavaPlugin implements Listener {
                 if (permission.has(sender, hinvite_perm)) {
                     if (sender instanceof Player) {
                         if (getHousing(args[0]) != null) {
-                            if (getHousing(args[0]).checkOwner((Player) sender) || (allow_stealing && isInHouse((Player) sender, args[0]))) {
+                            if (getHousing(args[0]).checkOwner((Player) sender) || (allow_stealing && hasKey((Player) sender, args[0]))) {
                                 inviters.add(new InviteClick((Player) sender, args[0]));
                                 sender.sendMessage(right_click);
                             } else {
@@ -581,6 +580,28 @@ public class Main extends JavaPlugin implements Listener {
             }
         }
 
+        return false;
+    }
+
+    private boolean hasKey(Player sender, String arg) {
+        PlayerInventory inv = sender.getInventory();
+        for(ItemStack stack: inv.getContents()){
+            if(stack != null) {
+                if(stack.getItemMeta() != null) {
+                    if (stack.getItemMeta().getLore() != null) {
+                        if(stack.getItemMeta().getLore().size() > 0)
+                        {
+                            if(stack.getItemMeta().getLore().get(0) == "House In A Bottle"){
+                                if(stack.getItemMeta().getLore().get(1) == arg)
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -744,15 +765,14 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onItemClick(PlayerInteractEvent event)
-    {
+    public void onItemClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-       // log.info("Interact!");
+        // log.info("Interact!");
         if (player.getItemInHand() != null) {
-        //    log.info("Has an item in hand!");
+            //    log.info("Has an item in hand!");
             if (player.getItemInHand().getItemMeta().getLore() != null) {
                 if (player.getItemInHand().getItemMeta().getLore().size() > 0 && player.getItemInHand().getItemMeta().getLore().get(0).equals("House In A Bottle")) {
-         //           log.info("Tis is a key!!");
+                    //           log.info("Tis is a key!!");
                     String house_name = player.getItemInHand().getItemMeta().getLore().get(1);
                     Housing house = housings.get(house_name);
                     if (house != null) {
